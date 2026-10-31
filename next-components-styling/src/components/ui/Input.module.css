@@ -1,0 +1,74 @@
+.inputWrapper {
+  position: relative;
+}
+
+/* Animación del label flotante */
+.floatingLabel {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: all 0.3s ease;
+  pointer-events: none;
+  color: #6b7280;
+  background: white;
+  padding: 0 4px;
+}
+
+/* Si el input tiene ícono, el label empieza después del ícono */
+.withIcon {
+  left: 40px;
+}
+
+.input:focus ~ .floatingLabel,
+.input:not(:placeholder-shown) ~ .floatingLabel {
+  top: 0;
+  font-size: 0.75rem;
+  color: #667eea;
+}
+
+/* Efecto de brillo en focus */
+.input {
+  transition: all 0.3s ease;
+}
+
+.input:focus {
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #667eea;
+}
+
+/* Animación de error */
+.error {
+  animation: shake 0.3s ease-in-out;
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-10px);
+  }
+  75% {
+    transform: translateX(10px);
+  }
+}
+
+.errorMessage {
+  color: #ef4444;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
