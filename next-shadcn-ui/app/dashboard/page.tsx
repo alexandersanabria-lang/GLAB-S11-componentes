@@ -1,6 +1,11 @@
 "use client"
 
 import { useState, type FormEvent, type ReactNode } from "react"
+import {
+  AlertTriangle, CalendarDays, CheckCircle2, Clock, Eye, FolderKanban, LayoutDashboard,
+  ListChecks, Mail, Pencil, Phone, Plus, Settings as SettingsIcon, Trash2, Users,
+  type LucideIcon,
+} from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -84,12 +89,104 @@ const nextId = (prefix: string, ids: string[]) =>
   `${prefix}-${String(Math.max(0, ...ids.map((i) => Number(i.split("-")[1]))) + 1).padStart(3, "0")}`
 const opts = (list: string[]) => list.map((v) => ({ value: v, label: v }))
 
-const projectVariant = (s: string) => (s === "Completado" ? "default" : s === "En revisión" ? "secondary" : "outline")
-const statusVariant = (s: string) => (s === "Completado" ? "default" : s === "En progreso" ? "secondary" : "outline")
-const priorityVariant = (p: string) =>
-  p === "Urgente" ? "destructive" : p === "Alta" ? "default" : p === "Media" ? "secondary" : "outline"
+const projectTone: Record<string, string> = {
+  Planificado: "bg-slate-100 text-slate-700 border-slate-200",
+  "En progreso": "bg-sky-100 text-sky-800 border-sky-200",
+  "En revisión": "bg-violet-100 text-violet-800 border-violet-200",
+  Completado: "bg-emerald-100 text-emerald-800 border-emerald-200",
+}
+const projectStrip: Record<string, string> = {
+  Planificado: "bg-slate-300",
+  "En progreso": "bg-sky-400",
+  "En revisión": "bg-violet-400",
+  Completado: "bg-emerald-500",
+}
+const taskTone: Record<string, string> = {
+  Pendiente: "bg-amber-100 text-amber-800 border-amber-200",
+  "En progreso": "bg-sky-100 text-sky-800 border-sky-200",
+  Completado: "bg-emerald-100 text-emerald-800 border-emerald-200",
+}
+const priorityTone: Record<string, string> = {
+  Baja: "bg-slate-100 text-slate-700 border-slate-200",
+  Media: "bg-blue-100 text-blue-800 border-blue-200",
+  Alta: "bg-orange-100 text-orange-800 border-orange-200",
+  Urgente: "bg-red-100 text-red-800 border-red-200",
+}
 
 /* ---------- Componentes pequeños ---------- */
+function Pill({ tone = "", children }: { tone?: string; children: ReactNode }) {
+  return (
+    <Badge variant="outline" className={`gap-1.5 font-medium ${tone}`}>
+      {children}
+    </Badge>
+  )
+}
+
+function Bar({ value }: { value: number }) {
+  return (
+    <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${value}%` }} />
+    </div>
+  )
+}
+
+function Stat({ icon: Icon, title, value, note }: { icon: LucideIcon; title: string; value: ReactNode; note: string }) {
+  return (
+    <Card>
+      <CardContent className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <p className="text-sm text-muted-foreground">{title}</p>
+          <p className="text-3xl font-bold tracking-tight tabular-nums">{value}</p>
+          <p className="text-xs text-muted-foreground">{note}</p>
+        </div>
+        <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="size-5" />
+        </span>
+      </CardContent>
+    </Card>
+  )
+}
+
+function SectionHeader({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      {action}
+    </div>
+  )
+}
+
+function Empty({ icon: Icon, title, hint }: { icon: LucideIcon; title: string; hint: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-8 text-center">
+      <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <Icon className="size-5" />
+      </span>
+      <p className="font-medium">{title}</p>
+      <p className="max-w-xs text-sm text-muted-foreground">{hint}</p>
+    </div>
+  )
+}
+
+function AvatarStack({ names }: { names: string[] }) {
+  return (
+    <div className="flex -space-x-2">
+      {names.slice(0, 4).map((n, i) => (
+        <Avatar key={`${n}-${i}`} className="size-7 border-2 border-background">
+          <AvatarFallback className="bg-primary/10 text-[10px] font-semibold text-primary">{initials(n)}</AvatarFallback>
+        </Avatar>
+      ))}
+      {names.length > 4 && (
+        <span className="flex size-7 items-center justify-center rounded-full border-2 border-background bg-muted text-[10px] font-semibold">
+          +{names.length - 4}
+        </span>
+      )}
+    </div>
+  )
+}
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid gap-2">
@@ -223,6 +320,9 @@ export default function DashboardPage() {
   const page = Math.min(taskPage, pageCount)
   const pageTasks = tasks.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
   const detail = projects.find((p) => p.id === detailId)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const gap = settings.compact ? "gap-2" : "gap-4"
 
   const addLog = (text: string) =>
     setActivity((prev) =>
@@ -354,55 +454,103 @@ export default function DashboardPage() {
   const goTo = (n: number) => setTaskPage(Math.min(Math.max(1, n), pageCount))
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8">
-          <h1 className="mb-2 text-4xl font-bold text-slate-900">Dashboard de Proyectos</h1>
-          <p className="text-slate-600">Gestiona tus proyectos y tareas con shadcn/ui</p>
-        </div>
+    <div className="min-h-screen bg-gradient-to-b from-emerald-50 via-background to-background">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-8">
+        {/* ---------- Encabezado ---------- */}
+        <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-primary">{settings.workspace}</p>
+            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Dashboard de Proyectos</h1>
+            <p className="mt-1 text-muted-foreground">Gestiona proyectos, equipo y tareas en un solo lugar.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => openDialog("task")}>
+              <Plus /> Nueva tarea
+            </Button>
+            <Button onClick={() => openDialog("project")}>
+              <Plus /> Nuevo proyecto
+            </Button>
+          </div>
+        </header>
 
-        <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="overview">Resumen</TabsTrigger>
-            <TabsTrigger value="projects">Proyectos</TabsTrigger>
-            <TabsTrigger value="team">Equipo</TabsTrigger>
-            <TabsTrigger value="tasks">Tareas</TabsTrigger>
-            <TabsTrigger value="settings">Configuración</TabsTrigger>
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList variant="line" className="h-auto w-full flex-wrap justify-start border-b p-0">
+            <TabsTrigger value="overview" className="flex-none gap-2 px-3 py-2"><LayoutDashboard /> Resumen</TabsTrigger>
+            <TabsTrigger value="projects" className="flex-none gap-2 px-3 py-2"><FolderKanban /> Proyectos</TabsTrigger>
+            <TabsTrigger value="team" className="flex-none gap-2 px-3 py-2"><Users /> Equipo</TabsTrigger>
+            <TabsTrigger value="tasks" className="flex-none gap-2 px-3 py-2"><ListChecks /> Tareas</TabsTrigger>
+            <TabsTrigger value="settings" className="flex-none gap-2 px-3 py-2"><SettingsIcon /> Configuración</TabsTrigger>
           </TabsList>
 
           {/* ---------- Resumen ---------- */}
-          <TabsContent value="overview" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {[
-                { title: "Total Proyectos", value: projects.length, note: `${projects.filter((p) => p.status === "Completado").length} completados` },
-                { title: "Tareas Completadas", value: `${done}/${tasks.length}`, note: `${tasks.length ? Math.round((done * 100) / tasks.length) : 0}% de avance` },
-                { title: "Tareas Pendientes", value: tasks.length - done, note: `${tasks.filter((t) => t.priority === "Urgente").length} urgentes` },
-                { title: "Miembros Activos", value: `${activeMembers}/${members.length}`, note: `${members.length - activeMembers} inactivos` },
-              ].map((s) => (
-                <Card key={s.title}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">{s.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{s.value}</div>
-                    <p className="text-xs text-muted-foreground">{s.note}</p>
-                  </CardContent>
-                </Card>
-              ))}
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Stat icon={FolderKanban} title="Proyectos" value={projects.length} note={`${projects.filter((p) => p.status === "Completado").length} completados`} />
+              <Stat icon={CheckCircle2} title="Tareas completadas" value={`${done}/${tasks.length}`} note={`${tasks.length ? Math.round((done * 100) / tasks.length) : 0}% de avance`} />
+              <Stat icon={Clock} title="Tareas pendientes" value={tasks.length - done} note={`${tasks.filter((t) => t.priority === "Urgente" && t.status !== "Completado").length} urgentes sin completar`} />
+              <Stat icon={Users} title="Miembros activos" value={`${activeMembers}/${members.length}`} note={`${members.length - activeMembers} inactivos`} />
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <CardTitle>Avance por proyecto</CardTitle>
+                  <CardDescription>Porcentaje de tareas completadas en cada proyecto</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {projects.length === 0 && <p className="text-sm text-muted-foreground">Aún no hay proyectos.</p>}
+                  {projects.map((p) => (
+                    <div key={p.id} className="space-y-2">
+                      <div className="flex items-center justify-between gap-2 text-sm">
+                        <span className="font-medium">{p.title}</span>
+                        <span className="flex items-center gap-2">
+                          <Pill tone={projectTone[p.status]}>{p.status}</Pill>
+                          <span className="w-10 text-right font-semibold tabular-nums">{progress(p.id)}%</span>
+                        </span>
+                      </div>
+                      <Bar value={progress(p.id)} />
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Tareas por estado</CardTitle>
+                  <CardDescription>{tasks.length} tareas en total</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {TASK_STATUS.map((s) => {
+                    const n = tasks.filter((t) => t.status === s).length
+                    return (
+                      <div key={s} className="space-y-1.5">
+                        <div className="flex justify-between text-sm">
+                          <Pill tone={taskTone[s]}>{s}</Pill>
+                          <span className="font-semibold tabular-nums">{n}</span>
+                        </div>
+                        <Bar value={tasks.length ? (n * 100) / tasks.length : 0} />
+                      </div>
+                    )
+                  })}
+                </CardContent>
+              </Card>
             </div>
 
             <Card>
               <CardHeader>
-                <CardTitle>Actividad Reciente</CardTitle>
+                <CardTitle>Actividad reciente</CardTitle>
                 <CardDescription>Se actualiza con lo que hagas en el dashboard</CardDescription>
               </CardHeader>
               <CardContent>
                 {activity.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Aún no hay actividad. Crea o edita algo para verla aquí.</p>
+                  <Empty icon={Clock} title="Aún no hay actividad" hint="Crea o edita un proyecto, miembro o tarea y lo verás aquí." />
                 ) : (
-                  <ul className="space-y-2 text-sm">
+                  <ul className="space-y-3 text-sm">
                     {activity.map((a, i) => (
-                      <li key={i}>• {a}</li>
+                      <li key={i} className="flex items-start gap-3">
+                        <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
+                        <span>{a}</span>
+                      </li>
                     ))}
                   </ul>
                 )}
@@ -412,150 +560,187 @@ export default function DashboardPage() {
 
           {/* ---------- Proyectos ---------- */}
           <TabsContent value="projects" className="space-y-4">
-            <Button onClick={() => openDialog("project")}>Nuevo Proyecto</Button>
-            {projects.length === 0 && <p className="text-muted-foreground">No hay proyectos todavía.</p>}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {projects.map((p) => (
-                <Card key={p.id}>
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1">
-                        <CardTitle className="text-lg">{p.title}</CardTitle>
-                        <CardDescription>{p.description || "Sin descripción"}</CardDescription>
+            <SectionHeader
+              title="Proyectos"
+              description={`${projects.length} ${projects.length === 1 ? "proyecto" : "proyectos"}`}
+              action={<Button onClick={() => openDialog("project")}><Plus /> Nuevo proyecto</Button>}
+            />
+            {projects.length === 0 ? (
+              <Card><CardContent><Empty icon={FolderKanban} title="No hay proyectos todavía" hint="Crea el primero con el botón Nuevo proyecto." /></CardContent></Card>
+            ) : (
+              <div className={`grid md:grid-cols-2 lg:grid-cols-3 ${gap}`}>
+                {projects.map((p) => {
+                  const total = tasks.filter((t) => t.projectId === p.id).length
+                  return (
+                    <Card key={p.id} className="gap-0 py-0">
+                      <div className={`h-1.5 ${projectStrip[p.status]}`} />
+                      <div className="flex flex-1 flex-col gap-4 p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 space-y-1">
+                            <h3 className="truncate text-base font-semibold">{p.title}</h3>
+                            <p className="line-clamp-2 text-sm text-muted-foreground">{p.description || "Sin descripción"}</p>
+                          </div>
+                          <Pill tone={projectTone[p.status]}>{p.status}</Pill>
+                        </div>
+
+                        <div>
+                          <div className="mb-1.5 flex justify-between text-sm">
+                            <span className="text-muted-foreground">Progreso · {total} tareas</span>
+                            <span className="font-semibold tabular-nums">{progress(p.id)}%</span>
+                          </div>
+                          <Bar value={progress(p.id)} />
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          {p.memberIds.length === 0 ? (
+                            <span className="text-sm text-muted-foreground">Sin miembros</span>
+                          ) : (
+                            <AvatarStack names={p.memberIds.map(memberName)} />
+                          )}
+                          <span className="text-sm text-muted-foreground">
+                            {p.memberIds.length} {p.memberIds.length === 1 ? "miembro" : "miembros"}
+                          </span>
+                        </div>
+
+                        <div className="mt-auto flex flex-wrap gap-2 border-t pt-3">
+                          <Button size="sm" variant="ghost" onClick={() => setDetailId(p.id)}><Eye /> Ver detalles</Button>
+                          <Button size="sm" variant="outline" onClick={() => openDialog("project", p.id)}><Pencil /> Editar</Button>
+                          <Button size="sm" variant="ghost" className="ml-auto text-destructive hover:text-destructive" onClick={() => deleteProject(p)}>
+                            <Trash2 /> Eliminar
+                          </Button>
+                        </div>
                       </div>
-                      <Badge variant={projectVariant(p.status)}>{p.status}</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div>
-                      <div className="mb-2 flex justify-between text-sm">
-                        <span className="text-muted-foreground">Progreso</span>
-                        <span className="font-medium">{progress(p.id)}%</span>
-                      </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                        <div className="h-full bg-primary transition-all" style={{ width: `${progress(p.id)}%` }} />
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{p.memberIds.length} miembros</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => setDetailId(p.id)}>Ver detalles</Button>
-                      <Button size="sm" variant="outline" onClick={() => openDialog("project", p.id)}>Editar</Button>
-                      <Button size="sm" variant="destructive" onClick={() => deleteProject(p)}>Eliminar</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    </Card>
+                  )
+                })}
+              </div>
+            )}
           </TabsContent>
 
           {/* ---------- Equipo ---------- */}
           <TabsContent value="team" className="space-y-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div className="space-y-1">
-                  <CardTitle>Miembros del Equipo</CardTitle>
-                  <CardDescription>Crea, edita y elimina miembros</CardDescription>
-                </div>
-                <Button onClick={() => openDialog("member")}>Nuevo Miembro</Button>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>ID</TableHead>
-                        <TableHead>Nombre</TableHead>
-                        <TableHead>Rol</TableHead>
-                        <TableHead>Cargo</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Teléfono</TableHead>
-                        <TableHead>Nacimiento</TableHead>
-                        <TableHead>Proyecto</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {members.map((m) => (
-                        <TableRow key={m.userId}>
-                          <TableCell>{m.userId}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Avatar><AvatarFallback>{initials(m.name)}</AvatarFallback></Avatar>
-                              <span className="font-medium">{m.name}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>{m.role}</TableCell>
-                          <TableCell>{m.position}</TableCell>
-                          <TableCell>{m.email}</TableCell>
-                          <TableCell>{m.phone}</TableCell>
-                          <TableCell>{fmt(m.birthdate)}</TableCell>
-                          <TableCell>{projectName(m.projectId)}</TableCell>
-                          <TableCell>
-                            <Badge variant={m.isActive ? "default" : "secondary"}>{m.isActive ? "Activo" : "Inactivo"}</Badge>
-                          </TableCell>
-                          <TableCell className="space-x-2 text-right">
-                            <Button size="sm" variant="outline" onClick={() => openDialog("member", m.userId)}>Editar</Button>
-                            <Button size="sm" variant="destructive" onClick={() => deleteMember(m)}>Eliminar</Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
+            <SectionHeader
+              title="Equipo"
+              description={`${members.length} miembros, ${activeMembers} activos`}
+              action={<Button onClick={() => openDialog("member")}><Plus /> Nuevo miembro</Button>}
+            />
+            <Card className="py-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="pl-4">Miembro</TableHead>
+                    <TableHead>Rol</TableHead>
+                    <TableHead>Cargo</TableHead>
+                    <TableHead>Contacto</TableHead>
+                    <TableHead>Nacimiento</TableHead>
+                    <TableHead>Proyecto</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="pr-4 text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {members.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8}><Empty icon={Users} title="No hay miembros" hint="Agrega a la primera persona del equipo." /></TableCell>
+                    </TableRow>
+                  )}
+                  {members.map((m) => (
+                    <TableRow key={m.userId}>
+                      <TableCell className="pl-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar>
+                            <AvatarFallback className="bg-primary/10 font-semibold text-primary">{initials(m.name)}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium leading-tight">{m.name}</p>
+                            <p className="text-xs text-muted-foreground">{m.userId}</p>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{m.role}</TableCell>
+                      <TableCell>{m.position || "—"}</TableCell>
+                      <TableCell>
+                        <p className="flex items-center gap-1.5"><Mail className="size-3.5 text-muted-foreground" />{m.email}</p>
+                        {m.phone && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Phone className="size-3.5" />{m.phone}</p>}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{fmt(m.birthdate)}</TableCell>
+                      <TableCell>{projectName(m.projectId)}</TableCell>
+                      <TableCell>
+                        <Pill tone={m.isActive ? "bg-emerald-100 text-emerald-800 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200"}>
+                          <span className={`size-1.5 rounded-full ${m.isActive ? "bg-emerald-500" : "bg-slate-400"}`} />
+                          {m.isActive ? "Activo" : "Inactivo"}
+                        </Pill>
+                      </TableCell>
+                      <TableCell className="pr-4">
+                        <div className="flex justify-end gap-1">
+                          <Button size="icon-sm" variant="ghost" aria-label={`Editar a ${m.name}`} onClick={() => openDialog("member", m.userId)}><Pencil /></Button>
+                          <Button size="icon-sm" variant="ghost" className="text-destructive hover:text-destructive" aria-label={`Eliminar a ${m.name}`} onClick={() => deleteMember(m)}><Trash2 /></Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </Card>
           </TabsContent>
 
           {/* ---------- Tareas ---------- */}
           <TabsContent value="tasks" className="space-y-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div className="space-y-1">
-                  <CardTitle>Gestión de Tareas</CardTitle>
-                  <CardDescription>{tasks.length} tareas, {PAGE_SIZE} por página</CardDescription>
-                </div>
-                <Button onClick={() => openDialog("task")}>Nueva Tarea</Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Descripción</TableHead>
-                        <TableHead>Proyecto</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead>Prioridad</TableHead>
-                        <TableHead>Asignado a</TableHead>
-                        <TableHead>Fecha límite</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
+            <SectionHeader
+              title="Tareas"
+              description={`${tasks.length} tareas, ${done} completadas`}
+              action={<Button onClick={() => openDialog("task")}><Plus /> Nueva tarea</Button>}
+            />
+            <Card className="py-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="pl-4">Descripción</TableHead>
+                    <TableHead>Proyecto</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Prioridad</TableHead>
+                    <TableHead>Asignado a</TableHead>
+                    <TableHead>Fecha límite</TableHead>
+                    <TableHead className="pr-4 text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pageTasks.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7}><Empty icon={ListChecks} title="No hay tareas" hint="Crea una tarea con el botón Nueva tarea." /></TableCell>
+                    </TableRow>
+                  )}
+                  {pageTasks.map((t) => {
+                    const overdue = !!t.deadline && t.status !== "Completado" && t.deadline < today
+                    return (
+                      <TableRow key={t.id}>
+                        <TableCell className="pl-4 font-medium">{t.description}</TableCell>
+                        <TableCell>{projectName(t.projectId)}</TableCell>
+                        <TableCell><Pill tone={taskTone[t.status]}>{t.status}</Pill></TableCell>
+                        <TableCell><Pill tone={priorityTone[t.priority]}>{t.priority}</Pill></TableCell>
+                        <TableCell>{memberName(t.userId)}</TableCell>
+                        <TableCell className={`whitespace-nowrap ${overdue ? "font-medium text-destructive" : ""}`}>
+                          <span className="flex items-center gap-1.5">
+                            {overdue ? <AlertTriangle className="size-3.5" /> : <CalendarDays className="size-3.5 text-muted-foreground" />}
+                            {fmt(t.deadline)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="pr-4">
+                          <div className="flex justify-end gap-1">
+                            <Button size="icon-sm" variant="ghost" aria-label="Editar tarea" onClick={() => openDialog("task", t.id)}><Pencil /></Button>
+                            <Button size="icon-sm" variant="ghost" className="text-destructive hover:text-destructive" aria-label="Eliminar tarea" onClick={() => deleteTask(t)}><Trash2 /></Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pageTasks.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={7} className="text-center text-muted-foreground">No hay tareas.</TableCell>
-                        </TableRow>
-                      )}
-                      {pageTasks.map((t) => (
-                        <TableRow key={t.id}>
-                          <TableCell className="font-medium">{t.description}</TableCell>
-                          <TableCell>{projectName(t.projectId)}</TableCell>
-                          <TableCell><Badge variant={statusVariant(t.status)}>{t.status}</Badge></TableCell>
-                          <TableCell><Badge variant={priorityVariant(t.priority)}>{t.priority}</Badge></TableCell>
-                          <TableCell>{memberName(t.userId)}</TableCell>
-                          <TableCell>{fmt(t.deadline)}</TableCell>
-                          <TableCell className="space-x-2 text-right">
-                            <Button size="sm" variant="outline" onClick={() => openDialog("task", t.id)}>Editar</Button>
-                            <Button size="sm" variant="destructive" onClick={() => deleteTask(t)}>Eliminar</Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                <Pagination>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+                <p className="text-sm text-muted-foreground">
+                  {tasks.length === 0 ? "Sin resultados" : `Mostrando ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, tasks.length)} de ${tasks.length}`}
+                </p>
+                <Pagination className="mx-0 w-auto">
                   <PaginationContent>
                     <PaginationItem>
                       <PaginationPrevious href="#" onClick={(e) => { e.preventDefault(); goTo(page - 1) }} />
@@ -572,25 +757,26 @@ export default function DashboardPage() {
                     </PaginationItem>
                   </PaginationContent>
                 </Pagination>
-              </CardContent>
+              </div>
             </Card>
           </TabsContent>
 
           {/* ---------- Configuración ---------- */}
-          <TabsContent value="settings">
-            <Card>
-              <CardHeader>
-                <CardTitle>Configuración</CardTitle>
-                <CardDescription>Preferencias simuladas del workspace</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={saveSettings} className="grid max-w-xl gap-4">
-                  {settingsMsg && (
-                    <Alert variant={settingsMsg.ok ? "default" : "destructive"}>
-                      <AlertTitle>{settingsMsg.ok ? "Listo" : "Revisa el formulario"}</AlertTitle>
-                      <AlertDescription>{settingsMsg.text}</AlertDescription>
-                    </Alert>
-                  )}
+          <TabsContent value="settings" className="space-y-4">
+            <SectionHeader title="Configuración" description="Preferencias simuladas del workspace" />
+            <form onSubmit={saveSettings} className="grid max-w-2xl gap-4">
+              {settingsMsg && (
+                <Alert variant={settingsMsg.ok ? "default" : "destructive"}>
+                  <AlertTitle>{settingsMsg.ok ? "Cambios guardados" : "Revisa el formulario"}</AlertTitle>
+                  <AlertDescription>{settingsMsg.text}</AlertDescription>
+                </Alert>
+              )}
+              <Card>
+                <CardHeader>
+                  <CardTitle>General</CardTitle>
+                  <CardDescription>Cómo se identifica tu workspace</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4">
                   <Field label="Nombre del workspace">
                     <Input value={settings.workspace} onChange={(e) => setSettings({ ...settings, workspace: e.target.value })} />
                   </Field>
@@ -604,21 +790,35 @@ export default function DashboardPage() {
                       options={[{ value: "es", label: "Español" }, { value: "en", label: "English" }, { value: "pt", label: "Português" }]}
                     />
                   </Field>
-                  <label className="flex items-center justify-between rounded-lg border p-3 text-sm">
-                    Notificaciones por email
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Preferencias</CardTitle>
+                  <CardDescription>Ajustes de avisos y de la vista</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3">
+                  <label className="flex items-center justify-between gap-4 rounded-lg border p-3 text-sm">
+                    <span>
+                      <span className="block font-medium">Notificaciones por email</span>
+                      <span className="text-muted-foreground">Recibe avisos cuando cambie una tarea.</span>
+                    </span>
                     <Switch checked={settings.notifications} onCheckedChange={(v) => setSettings({ ...settings, notifications: v })} />
                   </label>
-                  <label className="flex items-center justify-between rounded-lg border p-3 text-sm">
-                    Modo compacto
+                  <label className="flex items-center justify-between gap-4 rounded-lg border p-3 text-sm">
+                    <span>
+                      <span className="block font-medium">Modo compacto</span>
+                      <span className="text-muted-foreground">Reduce el espacio entre las tarjetas de proyectos.</span>
+                    </span>
                     <Switch checked={settings.compact} onCheckedChange={(v) => setSettings({ ...settings, compact: v })} />
                   </label>
-                  <Button type="submit" disabled={settingsSaving} className="w-fit">
-                    {settingsSaving && <Spinner />}
-                    {settingsSaving ? "Guardando..." : "Guardar cambios"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+              <Button type="submit" disabled={settingsSaving} className="w-fit">
+                {settingsSaving && <Spinner />}
+                {settingsSaving ? "Guardando..." : "Guardar cambios"}
+              </Button>
+            </form>
           </TabsContent>
         </Tabs>
       </div>
@@ -634,7 +834,7 @@ export default function DashboardPage() {
               </DialogHeader>
               <div className="space-y-4 text-sm">
                 <div className="flex items-center gap-3">
-                  <Badge variant={projectVariant(detail.status)}>{detail.status}</Badge>
+                  <Pill tone={projectTone[detail.status]}>{detail.status}</Pill>
                   <span>Progreso: {progress(detail.id)}%</span>
                 </div>
                 <div>
